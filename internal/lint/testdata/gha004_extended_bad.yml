@@ -1,0 +1,19 @@
+name: gha004-extended-bad
+on: [push]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - id: meta
+        name: get metadata
+        run: echo "branch=main" >> $GITHUB_OUTPUT
+      - name: use step output
+        run: echo "${{ steps.meta.outputs.branch }}"
+      - name: use matrix
+        run: echo "${{ matrix.config }}"

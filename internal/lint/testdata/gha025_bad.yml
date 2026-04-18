@@ -1,0 +1,24 @@
+name: deprecated-runner-bad
+on: [push]
+
+permissions:
+  contents: read
+
+jobs:
+  removed-ubuntu:
+    runs-on: ubuntu-20.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+  removed-macos:
+    runs-on: macos-12
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+  deprecated-windows:
+    runs-on: windows-2019
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683

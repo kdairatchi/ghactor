@@ -4,35 +4,61 @@ package pin
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/kdairatchi/ghactor/internal/ghapi"
 	"github.com/kdairatchi/ghactor/internal/workflow"
 )
 
+// DefaultTTL is the out-of-the-box TTL applied by NewResolver.
+// Entries older than this are considered stale and re-fetched transparently.
+const DefaultTTL = 30 * 24 * time.Hour
+
 // ResolveFunc looks up the 40-char commit SHA for a ref on GitHub.
 // Injectable so tests don't need network or `gh`.
 type ResolveFunc func(owner, repo, ref string) (string, error)
 
+// Resolver resolves GitHub Action refs to pinned SHAs, backed by a TTL-aware
+// on-disk cache. Use NewResolver for production; NewResolverWithTTL when you
+// need a custom TTL (including TTL=0 for "never expire").
 type Resolver struct {
 	cachePath string
-	mu        sync.Mutex
-	cache     map[string]string // "owner/repo@ref" -> sha
-	dirty     bool
-	Fetch     ResolveFunc
+	ttl       time.Duration
+	now       func() time.Time // injectable for tests; defaults to time.Now
+
+	mu    sync.Mutex
+	cache cacheFile
+	dirty bool
+
+	// Fetch is the network back-end. Tests may replace it without hitting GitHub.
+	Fetch ResolveFunc
 }
 
+// NewResolver returns a Resolver with DefaultTTL (30 days).
+// All callers in main.go continue to work unchanged.
 func NewResolver(cachePath string) *Resolver {
-	r := &Resolver{cachePath: cachePath, cache: map[string]string{}}
-	if data, err := os.ReadFile(cachePath); err == nil {
-		_ = json.Unmarshal(data, &r.cache)
+	return NewResolverWithTTL(cachePath, DefaultTTL)
+}
+
+// NewResolverWithTTL returns a Resolver with the specified TTL.
+// TTL=0 disables expiry entirely (all cached entries are served forever).
+func NewResolverWithTTL(cachePath string, ttl time.Duration) *Resolver {
+	r := &Resolver{
+		cachePath: cachePath,
+		ttl:       ttl,
+		now:       time.Now,
+	}
+	cf, err := loadCache(cachePath)
+	if err == nil {
+		r.cache = cf
+	} else {
+		r.cache = cacheFile{Version: cacheVersion, Entries: map[string]*cacheEntry{}}
 	}
 	client, err := ghapi.New()
 	if err != nil {
@@ -43,25 +69,26 @@ func NewResolver(cachePath string) *Resolver {
 	return r
 }
 
+// Save flushes any dirty cache entries to disk.
+// If TTL > 0, entries older than 3×TTL are pruned first.
 func (r *Resolver) Save() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if !r.dirty || r.cachePath == "" {
 		return nil
 	}
-	if err := os.MkdirAll(filepath.Dir(r.cachePath), 0o755); err != nil {
-		return err
-	}
-	data, err := json.MarshalIndent(r.cache, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(r.cachePath, data, 0o644)
+	return saveCache(r.cachePath, r.cache, r.ttl, r.now)
 }
 
 var sha40 = regexp.MustCompile(`^[0-9a-f]{40}$`)
 
-// Resolve returns (sha, error). If ref is already a 40-char SHA, returns it unchanged.
+// Resolve returns the 40-char SHA for owner/repo@ref.
+// If ref is already a full SHA it is returned as-is.
+//
+// Cache behaviour:
+//   - A cached entry is served if its age is less than TTL (or TTL == 0).
+//   - A stale or missing entry triggers a live fetch; the result is stored with
+//     the current timestamp so the TTL window resets.
 func (r *Resolver) Resolve(owner, repo, ref string) (string, error) {
 	if sha40.MatchString(ref) {
 		return ref, nil
@@ -69,9 +96,11 @@ func (r *Resolver) Resolve(owner, repo, ref string) (string, error) {
 	key := fmt.Sprintf("%s/%s@%s", owner, repo, ref)
 
 	r.mu.Lock()
-	if v, ok := r.cache[key]; ok {
+	entry, ok := r.cache.Entries[key]
+	if ok && !r.isStale(entry) {
+		sha := entry.SHA
 		r.mu.Unlock()
-		return v, nil
+		return sha, nil
 	}
 	r.mu.Unlock()
 
@@ -85,10 +114,19 @@ func (r *Resolver) Resolve(owner, repo, ref string) (string, error) {
 	}
 
 	r.mu.Lock()
-	r.cache[key] = sha
+	r.cache.Entries[key] = &cacheEntry{SHA: sha, ResolvedAt: r.now()}
 	r.dirty = true
 	r.mu.Unlock()
 	return sha, nil
+}
+
+// isStale reports whether e should be ignored due to TTL expiry.
+// Must be called with r.mu held (or from a context where no writes can race).
+func (r *Resolver) isStale(e *cacheEntry) bool {
+	if r.ttl == 0 {
+		return false
+	}
+	return r.now().Sub(e.ResolvedAt) > r.ttl
 }
 
 // buildResolveSHA returns a ResolveFunc backed by a ghapi.Client.

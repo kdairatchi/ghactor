@@ -1,0 +1,16 @@
+name: gha014-good
+on: [push]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: set env properly
+        run: echo "MY_VAR=value" >> $GITHUB_ENV
+      - name: add path properly
+        run: echo "/usr/local/bin/tool" >> $GITHUB_PATH

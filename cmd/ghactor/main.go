@@ -12,18 +12,26 @@ import (
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
+	"github.com/kdairatchi/ghactor/internal/audit"
+	"github.com/kdairatchi/ghactor/internal/baseline"
 	"github.com/kdairatchi/ghactor/internal/config"
 	"github.com/kdairatchi/ghactor/internal/doctor"
+	"github.com/kdairatchi/ghactor/internal/explain"
 	"github.com/kdairatchi/ghactor/internal/fix"
+	"github.com/kdairatchi/ghactor/internal/gen"
+	"github.com/kdairatchi/ghactor/internal/gitdiff"
 	"github.com/kdairatchi/ghactor/internal/lint"
 	"github.com/kdairatchi/ghactor/internal/pin"
+	"github.com/kdairatchi/ghactor/internal/sarifdiff"
+	"github.com/kdairatchi/ghactor/internal/secrets"
 	"github.com/kdairatchi/ghactor/internal/trail"
 	"github.com/kdairatchi/ghactor/internal/trial"
 	"github.com/kdairatchi/ghactor/internal/update"
+	"github.com/kdairatchi/ghactor/internal/watch"
 )
 
 var (
-	version = "0.2.0"
+	version = "0.3.0"
 
 	cRed    = color.New(color.FgRed, color.Bold).SprintFunc()
 	cYellow = color.New(color.FgYellow).SprintFunc()
@@ -53,6 +61,13 @@ func main() {
 		trailCmd(),
 		doctorCmd(),
 		rulesCmd(),
+		audit.Cmd(),
+		secrets.Cmd(),
+		baseline.Cmd(),
+		explain.Cmd(),
+		gen.Cmd(),
+		watch.Cmd(),
+		sarifdiff.Cmd(),
 	)
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, cRed("error:"), err)
@@ -64,13 +79,19 @@ func main() {
 
 func lintCmd() *cobra.Command {
 	var (
-		dir        string
-		jsonOut    bool
-		sarifOut   string
-		onlyGH     bool
-		disabled   []string
-		failLevel  string
-		configPath string
+		dir          string
+		jsonOut      bool
+		sarifOut     string
+		onlyGH       bool
+		disabled     []string
+		failLevel    string
+		configPath   string
+		baselinePath string
+		resolveDrift bool
+		junitOut     string
+		githubAnnot  bool
+		actionsDir   string
+		sinceRef     string
 	)
 	c := &cobra.Command{
 		Use:   "lint",
@@ -98,18 +119,87 @@ func lintCmd() *cobra.Command {
 			default:
 				return fmt.Errorf("invalid --fail-on %q (allowed: none|info|warning|error)", failLevel)
 			}
+
+			// --resolve-drift: instantiate a pin.Resolver so GHA008 tag-drift checks run.
+			var resolver *pin.Resolver
+			if resolveDrift {
+				cachePath := filepath.Join(".ghactor", "cache.json")
+				resolver = pin.NewResolver(cachePath)
+				defer resolver.Save() //nolint:errcheck
+			}
+
+			// --since: filter to files changed since a git ref.
+			var changedFiles map[string]bool
+			if sinceRef != "" {
+				var err error
+				changedFiles, err = gitdiff.ChangedSince(sinceRef)
+				if err != nil {
+					return fmt.Errorf("--since: %w", err)
+				}
+				if changedFiles != nil && len(changedFiles) == 0 {
+					fmt.Fprintln(os.Stderr, "no workflow files changed since", sinceRef)
+					return nil
+				}
+			}
+
 			issues, err := lint.RunWithOptions(lint.Options{
 				Dir:              dir,
 				DisabledRules:    disabled,
 				IgnoreActionlint: onlyGH,
 				Config:           cfg,
+				Resolver:         resolver,
+				ChangedFiles:     changedFiles,
 			})
 			if err != nil {
 				return err
 			}
+
+			// --actions: also lint composite action.yml files, merging into issues.
+			if actionsDir != "" {
+				actionIssues, err := lint.LintActionsWithOptions(lint.ActionOptions{
+					Dir:           actionsDir,
+					DisabledRules: disabled,
+					ChangedFiles:  changedFiles,
+				})
+				if err != nil {
+					return err
+				}
+				issues = append(issues, actionIssues...)
+			}
+
+			// --baseline: load snapshot, partition findings, swap issues for new-only set.
+			var suppressed []lint.Issue
+			if baselinePath != "" {
+				bl, err := baseline.Load(baselinePath)
+				if err != nil {
+					if os.IsNotExist(err) {
+						return fmt.Errorf("baseline file not found: %s (run 'ghactor baseline create' to create one)", baselinePath)
+					}
+					return err
+				}
+				var newOnes []lint.Issue
+				suppressed, newOnes = baseline.Filter(issues, bl)
+				fmt.Fprintf(os.Stderr, "baseline: suppressed %d findings (%d new)\n",
+					len(suppressed), len(newOnes))
+				issues = newOnes
+			}
+
+			// --json output (baseline-aware shape).
 			if jsonOut {
+				if baselinePath != "" {
+					type baselineJSON struct {
+						Suppressed []lint.Issue `json:"suppressed"`
+						New        []lint.Issue `json:"new"`
+					}
+					return json.NewEncoder(os.Stdout).Encode(baselineJSON{
+						Suppressed: suppressed,
+						New:        issues,
+					})
+				}
 				return json.NewEncoder(os.Stdout).Encode(issues)
 			}
+
+			// --sarif: existing behaviour unchanged.
 			if sarifOut != "" {
 				f, err := os.Create(sarifOut)
 				if err != nil {
@@ -121,6 +211,27 @@ func lintCmd() *cobra.Command {
 				}
 				fmt.Fprintf(os.Stderr, "%s wrote SARIF → %s (%d results)\n", cGreen("✓"), sarifOut, len(issues))
 			}
+
+			// --junit: write JUnit XML report to file.
+			if junitOut != "" {
+				f, err := os.Create(junitOut)
+				if err != nil {
+					return err
+				}
+				defer f.Close()
+				if err := lint.WriteJUnit(f, issues, version); err != nil {
+					return err
+				}
+				fmt.Fprintf(os.Stderr, "%s wrote JUnit → %s (%d results)\n", cGreen("✓"), junitOut, len(issues))
+			}
+
+			// --github: emit GHA workflow-command annotations to stdout.
+			if githubAnnot {
+				if err := lint.WriteGitHubAnnotations(os.Stdout, issues); err != nil {
+					return err
+				}
+			}
+
 			renderIssues(issues)
 			if shouldFail(issues, failLevel) {
 				os.Exit(1)
@@ -135,6 +246,12 @@ func lintCmd() *cobra.Command {
 	c.Flags().StringSliceVar(&disabled, "disable", nil, "rule IDs to disable (e.g. GHA005)")
 	c.Flags().StringVar(&failLevel, "fail-on", "warning", "exit 1 on: error | warning | info | none (alias: never)")
 	c.Flags().StringVar(&configPath, "config", "", "path to .ghactor.yml (default: auto-discover)")
+	c.Flags().StringVar(&baselinePath, "baseline", "", "suppress findings in baseline file; report only new ones (run 'ghactor baseline create' to create one)")
+	c.Flags().BoolVar(&resolveDrift, "resolve-drift", false, "resolve tag drift via GitHub API (activates GHA008); caches to .ghactor/cache.json")
+	c.Flags().StringVar(&junitOut, "junit", "", "write JUnit XML report to given path (for Jenkins/GitLab CI)")
+	c.Flags().BoolVar(&githubAnnot, "github", false, "emit GitHub Actions workflow-command annotations to stdout")
+	c.Flags().StringVar(&actionsDir, "actions", "", "also lint composite action.yml files under this directory")
+	c.Flags().StringVar(&sinceRef, "since", "", "only lint files changed since <ref> (e.g. origin/main, HEAD~3)")
 	return c
 }
 
@@ -242,13 +359,18 @@ func pinCmd() *cobra.Command {
 
 func fixCmd() *cobra.Command {
 	var (
-		dir       string
-		dry       bool
-		noPerms   bool
-		timeout   int
-		alsoPin   bool
-		cachePath string
-		pr        bool
+		dir          string
+		dry          bool
+		noPerms      bool
+		timeout      int
+		alsoPin      bool
+		cachePath    string
+		pr           bool
+		all          bool
+		fixPerms020  bool
+		fixShell022  bool
+		fixCont023   bool
+		defaultShell string
 	)
 	c := &cobra.Command{
 		Use:   "fix",
@@ -265,10 +387,15 @@ func fixCmd() *cobra.Command {
 			}
 
 			changes, err := fix.Apply(fix.Options{
-				Dir:            dir,
-				AddPermissions: !noPerms,
-				AddTimeout:     timeout,
-				Dry:            dry,
+				Dir:             dir,
+				AddPermissions:  !noPerms,
+				AddTimeout:      timeout,
+				Dry:             dry,
+				All:             all,
+				FixPerms020:     fixPerms020 || all,
+				FixShell022:     fixShell022 || all,
+				FixContainer023: fixCont023 || all,
+				DefaultShell:    defaultShell,
 			})
 			if err != nil {
 				return err
@@ -276,6 +403,9 @@ func fixCmd() *cobra.Command {
 			for _, ch := range changes {
 				fmt.Printf("%s %s:%d  %s %s\n",
 					cGreen("fix"), ch.File, ch.Line, cBlue("["+ch.Rule+"]"), ch.Summary)
+			}
+			for _, w := range fix.Warnings {
+				fmt.Fprintln(os.Stderr, cYellow("warn:"), w)
 			}
 			if alsoPin {
 				if cachePath == "" {
@@ -327,6 +457,11 @@ func fixCmd() *cobra.Command {
 	c.Flags().BoolVar(&alsoPin, "pin", false, "also pin actions to SHAs")
 	c.Flags().StringVar(&cachePath, "cache", "", "pin cache path")
 	c.Flags().BoolVar(&pr, "pr", false, "create a GitHub PR with the fixes (requires clean git tree)")
+	c.Flags().BoolVar(&all, "all", false, "enable all fixers (GHA002, GHA005, GHA020, GHA022, GHA023)")
+	c.Flags().BoolVar(&fixPerms020, "fix-perms", false, "GHA020: move workflow write perms to the sole job")
+	c.Flags().BoolVar(&fixShell022, "fix-shell", false, "GHA022: add shell: bash to run: steps with no shell set")
+	c.Flags().BoolVar(&fixCont023, "fix-containers", false, "GHA023: pin container/service images to digest")
+	c.Flags().StringVar(&defaultShell, "default-shell", "bash", "shell name for GHA022 (bash, pwsh, sh, …)")
 	return c
 }
 
@@ -669,6 +804,11 @@ func doctorCmd() *cobra.Command {
 			}
 			fmt.Println(cBold("ghactor doctor"))
 			fmt.Printf("  %s %s\n", cDim("dir:"), r.Dir)
+			cfgDisplay := "(none)"
+			if r.ConfigPath != "" {
+				cfgDisplay = r.ConfigPath
+			}
+			fmt.Printf("  %s %s\n", cDim("config:"), cfgDisplay)
 			fmt.Printf("  %s %d workflows · %d jobs · %d steps\n", cDim("scope:"), r.Workflows, r.Jobs, r.Steps)
 			score := r.Score()
 			scoreCol := cGreen

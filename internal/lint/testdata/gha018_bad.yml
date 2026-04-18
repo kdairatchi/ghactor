@@ -1,0 +1,16 @@
+name: gha018-bad
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: read
+
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: export issue title to env
+        run: echo "ISSUE_TITLE=${{ github.event.issue.title }}" >> $GITHUB_ENV

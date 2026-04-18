@@ -1,0 +1,14 @@
+name: test
+on: [push]
+defaults:
+  run:
+    shell: bash
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - name: build
+        run: go build ./...

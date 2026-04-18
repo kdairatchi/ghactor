@@ -1,0 +1,21 @@
+name: deprecated-action-version-bad
+on: [push]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # hard-fail deprecated v2 — SevError
+      - uses: actions/upload-artifact@v2
+      # deprecated v3 — SevError
+      - uses: actions/download-artifact@v3
+      # deprecated v2 — SevWarning
+      - uses: actions/cache@v2
+      # SHA-pinned with v3 comment — SevWarning (checkout v3 = Node16 deprecated)
+      - uses: actions/checkout@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa # v3
+      # whole action deprecated — SevError
+      - uses: actions/create-release@v1

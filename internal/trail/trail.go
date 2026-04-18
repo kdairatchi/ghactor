@@ -1,14 +1,40 @@
-// Package trail reports recent workflow runs via `gh run list` and flags flaky workflows.
+// Package trail reports recent workflow runs and flags flaky workflows.
+//
+// Run sources: by default the package tries the GitHub REST API first and
+// falls back to the gh CLI only if REST fails. Use WindowOpts.Source to
+// override the selection.
+//
+// Environment variables:
+//
+//	GHACTOR_GITHUB_TOKEN  token override (highest priority)
+//	GITHUB_TOKEN          standard CI token
+//	GITHUB_REPOSITORY     owner/repo slug (set automatically in GH Actions)
+//	GITHUB_API_URL        GitHub Enterprise Server API base URL
 package trail
 
 import (
-	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+)
+
+// Source selects how RecentWindow fetches workflow runs.
+type Source int
+
+const (
+	// SourceAuto tries the GitHub REST API first; on failure it warns to
+	// stderr and falls back to the gh CLI. This is the default.
+	SourceAuto Source = iota
+
+	// SourceREST uses the REST API exclusively. Returns an error if it fails.
+	SourceREST
+
+	// SourceGHCLI uses `gh run list` exclusively. Requires gh on PATH.
+	SourceGHCLI
 )
 
 type Run struct {
@@ -32,67 +58,67 @@ func Recent(limit int, workflow string) ([]Run, error) {
 	return RecentWindow(WindowOpts{Limit: limit, Workflow: workflow})
 }
 
+// WindowOpts controls how RecentWindow fetches and filters workflow runs.
 type WindowOpts struct {
 	Limit    int
 	Window   time.Duration
 	Branch   string
 	Workflow string
+
+	// Source selects the fetch mechanism. Default (zero value) is SourceAuto.
+	Source Source
 }
 
+// RecentWindow fetches workflow runs according to opts.Source:
+//
+//   - SourceAuto (default): REST first, gh CLI fallback on network/rate errors.
+//   - SourceREST: REST only; returns error on failure.
+//   - SourceGHCLI: gh CLI only (legacy path).
 func RecentWindow(o WindowOpts) ([]Run, error) {
 	if o.Limit <= 0 {
 		o.Limit = 100
 	}
 
-	// RecentWindow depends on gh CLI flag richness (--created, --workflow, --branch,
-	// --json). If gh is not available we cannot provide a full fallback via HTTPS
-	// because the REST API lacks equivalent composite filtering. Surface a clear
-	// error so users know what to fix.
-	if _, err := exec.LookPath("gh"); err != nil {
-		return nil, fmt.Errorf(
-			"trail: gh CLI not found; install it (https://cli.github.com) and run `gh auth login`. " +
-				"Note: GITHUB_TOKEN alone is not sufficient for `gh run list` flag richness",
-		)
-	}
+	switch o.Source {
+	case SourceREST:
+		return fetchViaREST(o)
 
-	args := []string{"run", "list",
-		"--limit", strconv.Itoa(o.Limit),
-		"--json", "databaseId,workflowName,event,status,conclusion,headBranch,headSha,url,attempt,number,createdAt,updatedAt",
-	}
-	if o.Branch != "" {
-		args = append(args, "--branch", o.Branch)
-	}
-	if o.Workflow != "" {
-		args = append(args, "--workflow", o.Workflow)
-	}
-	if o.Window > 0 {
-		// gh accepts `--created '>=2026-04-01'`
-		cutoff := time.Now().Add(-o.Window).UTC().Format("2006-01-02")
-		args = append(args, "--created", ">="+cutoff)
-	}
-	out, err := exec.Command("gh", args...).Output()
-	if err != nil {
-		if ee, ok := err.(*exec.ExitError); ok {
-			return nil, fmt.Errorf("gh run list: %s", strings.TrimSpace(string(ee.Stderr)))
+	case SourceGHCLI:
+		return fetchViaGHCLI(o)
+
+	default: // SourceAuto
+		runs, err := fetchViaREST(o)
+		if err == nil {
+			return runs, nil
 		}
-		return nil, fmt.Errorf("gh run list: %w", err)
-	}
-	var runs []Run
-	if err := json.Unmarshal(out, &runs); err != nil {
-		return nil, fmt.Errorf("parse gh output: %w", err)
-	}
-	// belt-and-suspenders client-side filter
-	if o.Window > 0 {
-		cutoff := time.Now().Add(-o.Window)
-		filtered := runs[:0]
-		for _, r := range runs {
-			if r.CreatedAt.After(cutoff) {
-				filtered = append(filtered, r)
-			}
+		// Only fall back on rate-limit, network errors, or 5xx. For auth
+		// errors (401/404) surface the REST error directly — gh CLI would
+		// fail for the same reason and the message is more informative.
+		if !isRateLimitError(err) && !isNetworkError(err) {
+			return nil, err
 		}
-		runs = filtered
+		fmt.Fprintf(os.Stderr,
+			"trail: REST fetch failed (%v); falling back to gh CLI\n", err)
+		ghRuns, ghErr := fetchViaGHCLI(o)
+		if ghErr != nil {
+			// gh is not available — surface the original REST error so the
+			// user knows what actually went wrong.
+			return nil, fmt.Errorf("%w (gh fallback also failed: %v)", err, ghErr)
+		}
+		return ghRuns, nil
 	}
-	return runs, nil
+}
+
+// isNetworkError returns true for transport-level failures (not HTTP errors).
+func isNetworkError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "connection refused") ||
+		strings.Contains(msg, "no such host") ||
+		strings.Contains(msg, "dial tcp") ||
+		strings.Contains(msg, "i/o timeout")
 }
 
 type WorkflowStats struct {

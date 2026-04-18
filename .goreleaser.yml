@@ -1,0 +1,128 @@
+version: 2
+
+project_name: ghactor
+
+builds:
+  - id: ghactor
+    main: ./cmd/ghactor
+    binary: ghactor
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+
+archives:
+  - id: default
+    format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - LICENSE
+      - README.md
+      - CHANGELOG.md
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+brews:
+  - repository:
+      owner: kdairatchi
+      name: homebrew-tap
+    name: ghactor
+    homepage: https://github.com/kdairatchi/ghactor
+    description: Security-first CLI for GitHub Actions workflows
+    license: MIT
+    commit_author:
+      name: kdairatchi
+      email: 96064915+kdairatchi@users.noreply.github.com
+
+scoops:
+  - repository:
+      owner: kdairatchi
+      name: scoop-bucket
+    homepage: https://github.com/kdairatchi/ghactor
+    description: Security-first CLI for GitHub Actions workflows
+    license: MIT
+    commit_author:
+      name: kdairatchi
+      email: 96064915+kdairatchi@users.noreply.github.com
+
+nfpms:
+  - id: default
+    package_name: ghactor
+    homepage: https://github.com/kdairatchi/ghactor
+    description: Security-first CLI for GitHub Actions workflows
+    license: MIT
+    formats:
+      - deb
+      - rpm
+      - apk
+    maintainer: kdairatchi <96064915+kdairatchi@users.noreply.github.com>
+
+dockers:
+  - id: default
+    image_templates:
+      - ghcr.io/kdairatchi/ghactor:{{ .Version }}
+      - ghcr.io/kdairatchi/ghactor:latest
+    dockerfile: Dockerfile
+    goos: linux
+    goarch: amd64
+    build_flag_templates:
+      - "--label=org.opencontainers.image.title={{ .ProjectName }}"
+      - "--label=org.opencontainers.image.description=Security-first CLI for GitHub Actions workflows"
+      - "--label=org.opencontainers.image.url=https://github.com/kdairatchi/ghactor"
+      - "--label=org.opencontainers.image.source=https://github.com/kdairatchi/ghactor"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.licenses=MIT"
+
+sboms:
+  - artifacts: archive
+    documents:
+      - "{{ .ProjectName }}_{{ .Version }}_sbom.spdx.json"
+    cmd: syft
+    args:
+      - encode
+      - spdx-json
+      - -
+    env:
+      - SYFT_FILE_METADATA_SELECTION=all
+      - SYFT_FILE_METADATA_CATALOGER=true
+
+signs:
+  - cmd: cosign
+    certificate: "{{ .Env.COSIGN_CERTIFICATE }}"
+    args:
+      - sign-blob
+      - --yes
+      - --oidc-issuer=https://token.actions.githubusercontent.com
+      - --oidc-provider=github
+      - --output-certificate={{ .Env.COSIGN_CERTIFICATE }}
+      - --output-signature={{ .Signature }}
+      - "{{ .Artifact }}"
+    artifacts: checksum
+    output: true
+
+release:
+  draft: false
+  mode: replace
+  footer: |
+    ## Security
+
+    ghactor is a security-first tool. Review the [CHANGELOG](CHANGELOG.md) and test thoroughly before updating in production.
+
+    ## Installation
+
+    ```sh
+    go install github.com/kdairatchi/ghactor/cmd/ghactor@{{ .Tag }}
+    ```
+
+    Or download pre-built binaries below.

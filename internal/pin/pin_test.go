@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 const fakeSHA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -31,10 +32,14 @@ func TestSplitUses(t *testing.T) {
 
 func TestResolveCachesAndPassesSHAThrough(t *testing.T) {
 	var calls int32
-	r := &Resolver{cache: map[string]string{}, Fetch: func(o, repo, ref string) (string, error) {
-		atomic.AddInt32(&calls, 1)
-		return fakeSHA, nil
-	}}
+	r := &Resolver{
+		cache: cacheFile{Version: cacheVersion, Entries: map[string]*cacheEntry{}},
+		now:   func() time.Time { return time.Now() },
+		Fetch: func(o, repo, ref string) (string, error) {
+			atomic.AddInt32(&calls, 1)
+			return fakeSHA, nil
+		},
+	}
 	for i := 0; i < 3; i++ {
 		got, err := r.Resolve("actions", "checkout", "v4")
 		if err != nil || got != fakeSHA {
@@ -61,7 +66,11 @@ func TestPinDryRunAndWrite(t *testing.T) {
 	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	r := &Resolver{cache: map[string]string{}, Fetch: func(_, _, _ string) (string, error) { return fakeSHA, nil }}
+	r := &Resolver{
+		cache: cacheFile{Version: cacheVersion, Entries: map[string]*cacheEntry{}},
+		now:   time.Now,
+		Fetch: func(_, _, _ string) (string, error) { return fakeSHA, nil },
+	}
 
 	ch, err := Pin(wf, r, true)
 	if err != nil {

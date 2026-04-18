@@ -1,0 +1,15 @@
+- id: ghactor
+  name: ghactor
+  description: Security-first lint for GitHub Actions workflows
+  entry: ghactor lint --fail-on error
+  language: system
+  types: [yaml]
+  files: ^\.github/workflows/
+
+- id: ghactor-pin
+  name: ghactor pin
+  description: Pin GitHub Actions to 40-char SHAs
+  entry: ghactor pin
+  language: system
+  types: [yaml]
+  files: ^\.github/workflows/

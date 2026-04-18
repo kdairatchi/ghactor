@@ -1,0 +1,12 @@
+name: bad-action
+description: demonstrates GHA004 in a composite action
+inputs:
+  user_input:
+    description: untrusted input
+    required: true
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: echo "hi ${{ inputs.user_input }}"
+    - uses: actions/checkout@v4

@@ -1,0 +1,16 @@
+name: gha014-bad
+on: [push]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: set legacy env
+        run: echo "::set-env name=MY_VAR::value"
+      - name: add legacy path
+        run: echo "::add-path::/usr/local/bin/evil"

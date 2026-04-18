@@ -1,0 +1,16 @@
+name: gha012-bad
+on: [push]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: install deps via curl pipe
+        run: curl -fsSL https://example.com/install.sh | bash
+      - name: another download
+        run: wget -qO- https://example.com/setup.sh | sh

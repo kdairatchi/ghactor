@@ -1,0 +1,11 @@
+name: cross-org-secrets-bad
+on: [push]
+
+permissions:
+  contents: read
+
+jobs:
+  call-external:
+    uses: external-org/shared-workflows/.github/workflows/deploy.yml@v1
+    secrets: inherit
+    timeout-minutes: 10

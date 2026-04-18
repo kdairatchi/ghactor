@@ -1,0 +1,12 @@
+name: test
+on: [push]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    container:
+      image: node:20
+    services:
+      postgres:
+        image: postgres:15
+    steps:
+      - run: node --version

@@ -1,0 +1,16 @@
+name: spoofable-actor-check-bad
+on: [pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  check-actor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.actor == 'dependabot[bot]'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: step-level-actor-check
+        if: github.triggering_actor == 'renovate[bot]'
+        run: echo "bot action"

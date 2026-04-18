@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -14,6 +15,29 @@ import (
 	"github.com/kdairatchi/ghactor/internal/workflow"
 	"github.com/rhysd/actionlint"
 )
+
+// applyConfigSeverity takes an Issue that has already passed rule-disable
+// checks, consults the config for a severity override, and returns the
+// (possibly mutated) issue plus a boolean indicating whether the issue should
+// be kept.  A severity of "off" means drop the issue entirely.
+//
+// cfg may be nil; in that case the issue is returned unchanged and kept==true.
+func applyConfigSeverity(iss Issue, cfg *config.File, relPath string) (Issue, bool) {
+	if cfg == nil {
+		return iss, true
+	}
+	sev := cfg.ResolvedSeverity(iss.Kind, relPath)
+	switch sev {
+	case "":
+		// No override — keep the rule's compiled-in default.
+		return iss, true
+	case "off":
+		return iss, false
+	default:
+		iss.Severity = Severity(sev)
+		return iss, true
+	}
+}
 
 type Severity string
 
@@ -37,8 +61,9 @@ type Options struct {
 	Dir              string
 	DisabledRules    []string
 	IgnoreActionlint bool
-	Config           *config.File  // optional
-	Resolver         *pin.Resolver // optional; nil skips GHA008
+	Config           *config.File      // optional
+	Resolver         *pin.Resolver     // optional; nil skips GHA008
+	ChangedFiles     map[string]bool   // if non-nil, lint only paths contained here (repo-root-relative, forward slashes)
 }
 
 func Run(dir string) ([]Issue, error) {
@@ -48,6 +73,19 @@ func Run(dir string) ([]Issue, error) {
 func RunWithOptions(opts Options) ([]Issue, error) {
 	if opts.Dir == "" {
 		opts.Dir = ".github/workflows"
+	}
+
+	// Validate config against known rule IDs and emit warnings for typos.
+	if opts.Config != nil {
+		knownIDs := make([]string, len(Rules))
+		for i, r := range Rules {
+			knownIDs[i] = r.ID
+		}
+		// optRules may add GHA008/GHA010 depending on resolver; include them
+		// conservatively so users who reference them don't get spurious warnings.
+		optKnown := []string{"GHA008", "GHA010"}
+		knownIDs = append(knownIDs, optKnown...)
+		opts.Config.Validate(knownIDs, os.Stderr)
 	}
 	info, err := os.Stat(opts.Dir)
 	if err != nil {
@@ -65,6 +103,38 @@ func RunWithOptions(opts Options) ([]Issue, error) {
 		return nil, fmt.Errorf("no workflow files under %s", opts.Dir)
 	}
 
+	// --since filter: when ChangedFiles is non-nil, drop any file whose
+	// repo-root-relative path is not in the set. Resolve the git root once
+	// here and reuse it for both the actionlint file list and the workflow
+	// custom-rule loop. If we cannot resolve the git root we conservatively
+	// treat all files as out-of-scope (fail closed).
+	var (
+		gitRoot    string
+		gitRootErr error
+	)
+	if opts.ChangedFiles != nil {
+		gitRoot, gitRootErr = gitRepoRoot()
+		var filtered []string
+		if gitRootErr == nil {
+			for _, f := range files {
+				rel, err := repoRelPath(gitRoot, f)
+				if err != nil {
+					continue
+				}
+				if opts.ChangedFiles[rel] {
+					filtered = append(filtered, f)
+				}
+			}
+		}
+		// gitRootErr != nil → filtered stays nil → all files dropped (defensive).
+		files = filtered
+	}
+
+	if len(files) == 0 {
+		// Either no workflows exist or all were filtered out by --since.
+		return nil, nil
+	}
+
 	var out []Issue
 
 	if !opts.IgnoreActionlint {
@@ -80,11 +150,37 @@ func RunWithOptions(opts Options) ([]Issue, error) {
 		return nil, fmt.Errorf("parse workflows: %w", err)
 	}
 
+	// Apply ChangedFiles filter to the loaded workflow set so the custom-rule
+	// loop only visits files that passed the earlier actionlint filter.
+	// Reuse the gitRoot already resolved above.
+	if opts.ChangedFiles != nil {
+		if gitRootErr == nil {
+			var kept []*workflow.File
+			for _, wf := range wfs {
+				rel, err := repoRelPath(gitRoot, wf.Path)
+				if err != nil {
+					continue
+				}
+				if opts.ChangedFiles[rel] {
+					kept = append(kept, wf)
+				}
+			}
+			wfs = kept
+		} else {
+			wfs = nil
+		}
+	}
+
 	var denyPatterns []string
+	var allowPatterns []string
 	if opts.Config != nil {
 		denyPatterns = opts.Config.DenyActions
+		allowPatterns = opts.Config.AllowActions
 	}
 	activeRules := append(Rules[:len(Rules):len(Rules)], optRules(opts.Resolver, denyPatterns)...)
+	if r := optAllowlistRule(allowPatterns); r != nil {
+		activeRules = append(activeRules, *r)
+	}
 
 	disabled := toSet(opts.DisabledRules)
 	for _, wf := range wfs {
@@ -108,9 +204,10 @@ func RunWithOptions(opts Options) ([]Issue, error) {
 							continue
 						}
 					}
-					if cfgRule := opts.Config.RuleFor(r.ID, relPath); cfgRule.Severity != "" {
-						iss.Severity = Severity(cfgRule.Severity)
-					}
+				}
+				iss, keep := applyConfigSeverity(iss, opts.Config, relPath)
+				if !keep {
+					continue
 				}
 				out = append(out, iss)
 			}
@@ -181,6 +278,35 @@ func toSet(xs []string) map[string]bool {
 		m[strings.TrimSpace(x)] = true
 	}
 	return m
+}
+
+// gitRepoRoot returns the absolute path of the current git repository root.
+// It shells out to "git rev-parse --show-toplevel". Returns an error when git
+// is unavailable or the cwd is not inside a repository.
+func gitRepoRoot() (string, error) {
+	out, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// repoRelPath returns the repo-root-relative path of absPath using forward
+// slashes, suitable for comparison with ChangedFiles keys.
+func repoRelPath(root, absPath string) (string, error) {
+	// Make absPath absolute if it is not already (it may be relative to cwd).
+	if !filepath.IsAbs(absPath) {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return "", err
+		}
+		absPath = filepath.Join(cwd, absPath)
+	}
+	rel, err := filepath.Rel(root, absPath)
+	if err != nil {
+		return "", err
+	}
+	return filepath.ToSlash(rel), nil
 }
 
 // extractUsesFromMessage pulls a quoted `uses:` value from a rule message (used for trusted-actions filtering).

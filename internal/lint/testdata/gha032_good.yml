@@ -1,0 +1,16 @@
+name: spoofable-actor-check-good
+on: [pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  check-actor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: safe-bot-check
+        # Check event name and PR user login rather than actor
+        if: github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]'
+        run: echo "safe bot detection"

@@ -1,0 +1,17 @@
+name: publish-no-cache-good
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: build
+        run: npm ci && npm run build
+      - uses: softprops/action-gh-release@v1

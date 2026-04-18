@@ -16,6 +16,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Warnings collects non-fatal per-file messages produced by fixers that can
+// skip individual items (e.g. GHA023 when docker is unavailable).
+var Warnings []string
+
 type Change struct {
 	File    string
 	Rule    string
@@ -23,11 +27,42 @@ type Change struct {
 	Summary string
 }
 
+// Options controls which autofixes are applied by Apply.
+//
+// Existing fields (AddPermissions, AddTimeout) are unchanged so callers that
+// construct Options literals without field names continue to compile.
+//
+// New fixers are opt-in via the individual Fix* booleans, or can all be
+// enabled at once with All: true.
 type Options struct {
 	Dir            string
 	AddPermissions bool
 	AddTimeout     int
 	Dry            bool
+
+	// All enables every fixer including the new GHA020/022/023 fixers.
+	// Individual Fix* flags are OR-ed with All.
+	All bool
+
+	// FixPerms020 enables the GHA020 autofix: move workflow-level write
+	// permissions down to the single job that needs them.
+	FixPerms020 bool
+
+	// FixShell022 enables the GHA022 autofix: add shell: <DefaultShell> to
+	// steps with run: but no explicit shell:.
+	FixShell022 bool
+
+	// FixContainer023 enables the GHA023 autofix: resolve container and service
+	// image references to their sha256 digest.
+	FixContainer023 bool
+
+	// DefaultShell is the shell name injected by the GHA022 fixer.
+	// Zero value defaults to "bash".
+	DefaultShell string
+
+	// DigestResolver is the resolver used by the GHA023 fixer.
+	// Nil uses the default dockerResolver (shells to docker manifest inspect).
+	DigestResolver DigestResolver
 }
 
 func Apply(opts Options) ([]Change, error) {
@@ -70,6 +105,39 @@ func applyFile(f *workflow.File, opts Options) ([]Change, error) {
 			src = newSrc
 			modified = true
 			changes = append(changes, jobChanges...)
+		}
+	}
+
+	if opts.All || opts.FixPerms020 {
+		newSrc, permsChanges, note := movePermsToJob(f.Path, src)
+		if note != "" {
+			Warnings = append(Warnings, f.Path+": "+note)
+		}
+		if len(permsChanges) > 0 {
+			src = newSrc
+			modified = true
+			changes = append(changes, permsChanges...)
+		}
+	}
+
+	if opts.All || opts.FixShell022 {
+		newSrc, shellChanges := addShellToSteps(f.Path, src, opts.DefaultShell)
+		if len(shellChanges) > 0 {
+			src = newSrc
+			modified = true
+			changes = append(changes, shellChanges...)
+		}
+	}
+
+	if opts.All || opts.FixContainer023 {
+		newSrc, digestChanges, warns := digestPinContainers(f.Path, src, opts.DigestResolver)
+		if len(warns) > 0 {
+			Warnings = append(Warnings, warns...)
+		}
+		if len(digestChanges) > 0 {
+			src = newSrc
+			modified = true
+			changes = append(changes, digestChanges...)
 		}
 	}
 

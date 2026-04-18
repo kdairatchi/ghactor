@@ -1,0 +1,17 @@
+name: gha012-good
+on: [push]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: download and verify
+        run: |
+          curl -fsSL https://example.com/install.sh -o install.sh
+          sha256sum -c install.sh.sha256
+          bash install.sh

@@ -18,12 +18,13 @@ type File struct {
 
 // ReusableUse records a `jobs.<id>.uses:` call to an external reusable workflow.
 type ReusableUse struct {
-	Owner string
-	Repo  string
-	Path  string
-	Ref   string
-	Line  int
-	Col   int
+	Owner          string
+	Repo           string
+	Path           string
+	Ref            string
+	Line           int
+	Col            int
+	SecretsInherit bool // true when `secrets: inherit` is set on the calling job
 }
 
 type Workflow struct {
@@ -189,13 +190,25 @@ func attachReusablePositions(root *yaml.Node, wf *Workflow) {
 			if !ok {
 				continue
 			}
+			// Detect `secrets: inherit` as a sibling key of `uses` in this job.
+			secretsInherit := false
+			for k := 0; k+1 < len(jobNode.Content); k += 2 {
+				if jobNode.Content[k].Value == "secrets" {
+					sv := jobNode.Content[k+1]
+					if sv.Kind == yaml.ScalarNode && strings.EqualFold(sv.Value, "inherit") {
+						secretsInherit = true
+					}
+					break
+				}
+			}
 			wf.Reusables = append(wf.Reusables, ReusableUse{
-				Owner: owner,
-				Repo:  repo,
-				Path:  path,
-				Ref:   ref,
-				Line:  valNode.Line,
-				Col:   valNode.Column,
+				Owner:          owner,
+				Repo:           repo,
+				Path:           path,
+				Ref:            ref,
+				Line:           valNode.Line,
+				Col:            valNode.Column,
+				SecretsInherit: secretsInherit,
 			})
 		}
 	}

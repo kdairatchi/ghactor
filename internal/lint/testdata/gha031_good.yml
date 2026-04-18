@@ -1,0 +1,21 @@
+name: obfuscated-run-good
+on: [push]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: safe-base64-decode-to-file
+        run: |
+          echo "aGVsbG8=" | base64 -d > output.txt
+          cat output.txt
+
+      - name: download-verify-execute
+        run: |
+          curl -o script.sh https://example.com/script.sh
+          sha256sum -c checksums.txt
+          bash script.sh

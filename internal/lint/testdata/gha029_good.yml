@@ -1,0 +1,17 @@
+name: same-org-secrets-good
+on: [push]
+
+permissions:
+  contents: read
+
+jobs:
+  # same org — no cross-org leak
+  call-internal:
+    uses: myorg/shared-workflows/.github/workflows/deploy.yml@v1
+    secrets: inherit
+    timeout-minutes: 10
+
+  # cross-org but no secrets: inherit — safe
+  call-external-no-inherit:
+    uses: external-org/shared-workflows/.github/workflows/ci.yml@v1
+    timeout-minutes: 10

@@ -1,0 +1,21 @@
+name: gha023-good
+on: [push]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    container:
+      image: node:20@sha256:a9f26cf4c8b413f4e05a2c2a5dfd4cd7cb93a10e45cce0e2d5e1d92637cfbec2
+    services:
+      postgres:
+        image: postgres:16-alpine@sha256:b69fc5a91a948f2db62b2e8d8f5f9f3fbfdfe8c3a9a33e4b7e4a3e3e2e2e2e2e
+        env:
+          POSTGRES_PASSWORD: postgres
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: run tests
+        run: npm test

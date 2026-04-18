@@ -1,0 +1,23 @@
+name: gha021-bad
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: Target environment
+        required: true
+      debug:
+        description: Enable debug mode
+        required: false
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  call:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: deploy
+        run: echo "deploying to ${{ inputs.environment }}"

@@ -1,0 +1,15 @@
+name: tainted-changed-files-bad
+on: [push]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - id: changed
+        uses: tj-actions/changed-files@v44
+      - name: use-output
+        run: echo ${{ steps.changed.outputs.all_changed_files }}

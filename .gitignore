@@ -1,0 +1,20 @@
+# ghactor build artifacts
+/ghactor
+/dist/
+*.sarif
+*.junit.xml
+
+# Local ghactor cache + baseline
+/.ghactor/
+
+# AI/agent metadata — never committed
+/.claude/
+CLAUDE.md
+TODO.md
+plans/
+
+# Editor + OS
+.vscode/
+.idea/
+*.swp
+.DS_Store

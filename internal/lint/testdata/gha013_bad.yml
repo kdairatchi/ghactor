@@ -1,0 +1,16 @@
+name: gha013-bad
+on: [push]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/cache@5a3ec84efa3866f3c4f9ba72f5b62e8c0096f9be
+        with:
+          path: ~/.npm
+          key: ${{ github.event.pull_request.head.sha }}-npm
