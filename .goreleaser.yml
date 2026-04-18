@@ -32,28 +32,11 @@ checksum:
   name_template: "checksums.txt"
   algorithm: sha256
 
-brews:
-  - repository:
-      owner: kdairatchi
-      name: homebrew-tap
-    name: ghactor
-    homepage: https://github.com/kdairatchi/ghactor
-    description: Security-first CLI for GitHub Actions workflows
-    license: MIT
-    commit_author:
-      name: kdairatchi
-      email: 96064915+kdairatchi@users.noreply.github.com
-
-scoops:
-  - repository:
-      owner: kdairatchi
-      name: scoop-bucket
-    homepage: https://github.com/kdairatchi/ghactor
-    description: Security-first CLI for GitHub Actions workflows
-    license: MIT
-    commit_author:
-      name: kdairatchi
-      email: 96064915+kdairatchi@users.noreply.github.com
+# brews: / scoops: are commented out until the tap repositories exist.
+# When ready, create:
+#   gh repo create kdairatchi/homebrew-tap --public
+#   gh repo create kdairatchi/scoop-bucket --public
+# Then restore these stanzas in a follow-up release.
 
 nfpms:
   - id: default
