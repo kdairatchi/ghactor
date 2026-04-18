@@ -187,7 +187,7 @@ func addTopPermissions(src []byte) ([]byte, bool) {
 	}
 	_, _, onIdx := findKey(m, "on")
 	totalLines := bytes.Count(src, []byte("\n")) + 1
-	insertAt := totalLines
+	var insertAt int
 	if onIdx >= 0 {
 		insertAt = endLineOfValue(m, onIdx, totalLines)
 	} else {

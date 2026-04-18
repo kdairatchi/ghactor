@@ -90,7 +90,9 @@ func TestPinDryRunAndWrite(t *testing.T) {
 func TestRewriteFileTo(t *testing.T) {
 	src := "steps:\n  - uses: actions/checkout@v3\n  - uses: actions/setup-go@v4\n"
 	path := filepath.Join(t.TempDir(), "w.yml")
-	os.WriteFile(path, []byte(src), 0o644)
+	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	targets := map[string]Pinned{
 		"actions/checkout": {SHA: fakeSHA, Tag: "v4"},
 	}
