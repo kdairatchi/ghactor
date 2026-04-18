@@ -85,17 +85,10 @@ dockers:
       - "--label=org.opencontainers.image.licenses=MIT"
 
 sboms:
-  - artifacts: archive
-    documents:
-      - "{{ .ProjectName }}_{{ .Version }}_sbom.spdx.json"
-    cmd: syft
-    args:
-      - encode
-      - spdx-json
-      - "-"
-    env:
-      - SYFT_FILE_METADATA_SELECTION=all
-      - SYFT_FILE_METADATA_CATALOGER=true
+  - id: default
+    artifacts: archive
+    # Use GoReleaser's default syft invocation: `syft $artifact -o spdx-json=$document`.
+    # Overriding cmd/args here with custom subcommands tripped up syft v1 CLI.
 
 signs:
   - cmd: cosign
