@@ -92,15 +92,15 @@ sboms:
 
 signs:
   - cmd: cosign
-    certificate: "{{ .Env.COSIGN_CERTIFICATE }}"
+    signature: "${artifact}.sig"
+    certificate: "${artifact}.pem"
     args:
       - sign-blob
       - --yes
       - --oidc-issuer=https://token.actions.githubusercontent.com
-      - --oidc-provider=github
-      - --output-certificate={{ .Env.COSIGN_CERTIFICATE }}
-      - --output-signature={{ .Signature }}
-      - "{{ .Artifact }}"
+      - --output-certificate=${certificate}
+      - --output-signature=${signature}
+      - ${artifact}
     artifacts: checksum
     output: true
 
