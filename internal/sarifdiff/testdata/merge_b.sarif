@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "ghactor",
+          "version": "0.3.0",
+          "rules": [
+            { "id": "GHA004", "name": "UntrustedContextInRun" },
+            { "id": "GHA007", "name": "UnpinnedAction" }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "GHA004",
+          "level": "error",
+          "message": { "text": "Untrusted context in run: github.event.issue.title" },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": ".github/workflows/triage.yml" },
+                "region": { "startLine": 10, "startColumn": 7 }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "GHA007",
+          "level": "error",
+          "message": { "text": "action actions/setup-node@v4 is not pinned to a SHA" },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": ".github/workflows/release.yml" },
+                "region": { "startLine": 22, "startColumn": 11 }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

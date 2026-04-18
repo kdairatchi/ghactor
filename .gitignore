@@ -1,8 +1,8 @@
 # ghactor build artifacts
 /ghactor
 /dist/
-*.sarif
-*.junit.xml
+/*.sarif
+/*.junit.xml
 
 # Local ghactor cache + baseline
 /.ghactor/

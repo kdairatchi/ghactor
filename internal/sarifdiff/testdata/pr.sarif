@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "ghactor",
+          "version": "0.3.0",
+          "rules": [
+            { "id": "GHA004", "name": "UntrustedContextInRun" },
+            { "id": "GHA019", "name": "IdTokenWrite" },
+            { "id": "GHA007", "name": "UnpinnedAction" }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "GHA004",
+          "level": "error",
+          "message": { "text": "Untrusted context in run: github.event.pull_request.title" },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": ".github/workflows/deploy.yml" },
+                "region": { "startLine": 38, "startColumn": 9 }
+              }
+            }
+          ]
+        },
+        {
+          "ruleIndex": 1,
+          "level": "warning",
+          "message": { "text": "id-token: write granted — advisory" },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": ".github/workflows/release.yml" },
+                "region": { "startLine": 12, "startColumn": 5 }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "GHA007",
+          "level": "error",
+          "message": { "text": "action actions/checkout@main is not pinned to a SHA" },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": ".github/workflows/ci.yml" },
+                "region": { "startLine": 18, "startColumn": 11 }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
