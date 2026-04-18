@@ -302,6 +302,10 @@ severity:                 # per-rule severity override
   GHA005: warning         # escalate an info rule
 ```
 
+## Security
+
+Report suspected vulnerabilities privately — see [SECURITY.md](SECURITY.md).
+
 ---
 
 <div align="center">
