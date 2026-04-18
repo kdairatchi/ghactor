@@ -34,6 +34,9 @@ jobs:
         with:
           cosign-release: v2.2.0
 
+      - name: Install Syft (for SBOM generation)
+        uses: anchore/sbom-action/download-syft@df80a981bc6edbc4e220a492d3cbe9f5547a6e75 # v0.17.9
+
       - name: Log in to Container Registry
         uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
         with:
