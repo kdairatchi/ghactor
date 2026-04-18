@@ -373,7 +373,7 @@ func updateCmd() *cobra.Command {
 				cachePath = filepath.Join(".ghactor", "cache.json")
 			}
 			res := pin.NewResolver(cachePath)
-			defer res.Save()
+			defer func() { _ = res.Save() }()
 			updates, err := update.Scan(update.Options{
 				Dir: dir, AllowMajor: major, Concurrency: concurrency,
 			}, res)

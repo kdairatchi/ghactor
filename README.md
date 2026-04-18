@@ -43,16 +43,16 @@ Requires `gh` (GitHub CLI) for `pin`, `update`, and `trail`. Requires [`act`](ht
 
 ```mermaid
 flowchart LR
-    W[.github/workflows/*.yml] --> L[lint]
-    W --> F[fix]
-    W --> P[pin]
-    W --> T[trial]
-    L --> S{SARIF?}
-    S -->|yes| GH[GitHub Security tab]
-    S -->|no| C[CLI output]
+    W["workflows/*.yml"] --> L["lint"]
+    W --> F["fix"]
+    W --> P["pin"]
+    W --> T["trial"]
+    L --> S{"SARIF?"}
+    S -->|yes| GH["GitHub Security tab"]
+    S -->|no| C["CLI output"]
     F -->|--pin| P
     P --> W
-    T --> ACT[act local runner]
+    T --> ACT["act local runner"]
 
     classDef cmd fill:#0d0d15,stroke:#f0c040,color:#f0c040
     classDef sink fill:#0d0d15,stroke:#06b6d4,color:#06b6d4
@@ -83,22 +83,22 @@ The ten rules group into three lanes — **injection**, **drift**, and **least-p
 flowchart TB
     subgraph INJ["injection"]
         direction LR
-        GHA003[GHA003<br/>pwn-request<br/>⛔ error]
-        GHA004[GHA004<br/>expression injection<br/>⛔ error]
+        GHA003["GHA003<br/>pwn-request<br/>error"]
+        GHA004["GHA004<br/>expression injection<br/>error"]
     end
     subgraph PIN["drift / supply-chain"]
         direction LR
-        GHA001[GHA001<br/>tag not SHA<br/>⚠ warn]
-        GHA006[GHA006<br/>floating ref<br/>⚠ warn]
-        GHA007[GHA007<br/>no @ref<br/>⚠ warn]
-        GHA008[GHA008<br/>stale SHA<br/>⚠ warn]
-        GHA009[GHA009<br/>reusable wf ref<br/>⛔ error / ⚠ warn]
-        GHA010[GHA010<br/>deny-listed action<br/>⛔ error]
+        GHA001["GHA001<br/>tag not SHA<br/>warn"]
+        GHA006["GHA006<br/>floating ref<br/>warn"]
+        GHA007["GHA007<br/>no ref<br/>warn"]
+        GHA008["GHA008<br/>stale SHA<br/>warn"]
+        GHA009["GHA009<br/>reusable wf ref<br/>error / warn"]
+        GHA010["GHA010<br/>deny-listed action<br/>error"]
     end
     subgraph LP["least-privilege"]
         direction LR
-        GHA002[GHA002<br/>no permissions:<br/>⚠ warn]
-        GHA005[GHA005<br/>no timeout-minutes:<br/>ℹ info]
+        GHA002["GHA002<br/>no permissions<br/>warn"]
+        GHA005["GHA005<br/>no timeout-minutes<br/>info"]
     end
 
     classDef err fill:#1a0d0d,stroke:#ef4444,color:#ef4444
@@ -163,21 +163,25 @@ ghactor trial -e pull_request
 
 ```mermaid
 flowchart LR
-    PR[Pull request] --> CK[actions/checkout]
-    CK --> GA[kdairatchi/ghactor@v1]
-    GA --> SARIF[.sarif]
-    SARIF --> UP[upload-sarif]
-    UP --> TAB[Security tab]
-    GA -->|fail-on error| FAIL{Blocking finding?}
-    FAIL -->|yes| BLK[❌ PR blocked]
-    FAIL -->|no| OK[✅ Check passes]
+    PR["Pull request"] --> CK["actions/checkout"]
+    CK --> GA["kdairatchi/ghactor@v1"]
+    GA --> SARIF["ghactor.sarif"]
+    SARIF --> UP["upload-sarif"]
+    UP --> TAB["Security tab"]
+    GA -->|"fail-on: error"| FAIL{"Blocking finding?"}
+    FAIL -->|yes| BLK["PR blocked"]
+    FAIL -->|no| OK["Check passes"]
 
     classDef cmd fill:#0d0d15,stroke:#f0c040,color:#f0c040
     classDef sink fill:#0d0d15,stroke:#06b6d4,color:#06b6d4
     classDef node fill:#111119,stroke:#9ca3af,color:#fff
+    classDef bad fill:#1a0d0d,stroke:#ef4444,color:#ef4444
+    classDef good fill:#0d1a10,stroke:#22c55e,color:#22c55e
     class GA cmd
     class TAB,UP,SARIF sink
-    class PR,CK,FAIL,BLK,OK node
+    class PR,CK,FAIL node
+    class BLK bad
+    class OK good
 ```
 
 **As a composite action** — findings land in the Security tab via SARIF:

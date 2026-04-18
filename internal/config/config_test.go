@@ -8,9 +8,15 @@ import (
 
 func TestDiscoverWalksUpStopsAtGit(t *testing.T) {
 	root := t.TempDir()
-	os.MkdirAll(filepath.Join(root, ".git"), 0o755)
-	os.MkdirAll(filepath.Join(root, "sub", "deep"), 0o755)
-	os.WriteFile(filepath.Join(root, ".ghactor.yml"), []byte("version: 1"), 0o644)
+	if err := os.MkdirAll(filepath.Join(root, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "sub", "deep"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".ghactor.yml"), []byte("version: 1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	got, err := Discover(filepath.Join(root, "sub", "deep"))
 	if err != nil {

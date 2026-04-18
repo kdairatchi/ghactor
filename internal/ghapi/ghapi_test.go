@@ -10,28 +10,6 @@ import (
 	"time"
 )
 
-// newHTTPSClient builds a Client wired to the given httptest server, bypassing
-// the gh CLI detection so we can exercise the HTTPS path deterministically.
-func newHTTPSClient(t *testing.T, server *httptest.Server) *Client {
-	t.Helper()
-	return &Client{
-		m:     modeHTTPS,
-		token: "test-token",
-		http:  server.Client(),
-	}
-}
-
-// overrideBase replaces the package-level API base so requests land on the
-// test server. Returns a restore function to defer.
-func overrideBase(t *testing.T, base string) func() {
-	t.Helper()
-	orig := githubAPIBase
-	// We cannot assign to a const, so we test via a var alias.
-	// The package exposes githubAPIBase as a var for testability; see below.
-	_ = orig // silence vet
-	return func() {}
-}
-
 // TestHTTPS_OK verifies a 200 response is returned as raw bytes.
 func TestHTTPS_OK(t *testing.T) {
 	want := `{"sha":"abc123"}`
