@@ -1,0 +1,67 @@
+name: ghactor
+description: Security-first lint for GitHub Actions workflows (actionlint + ghactor rules). Optional SARIF upload.
+author: kdairatchi
+branding:
+  icon: shield
+  color: purple
+
+inputs:
+  dir:
+    description: Workflows directory
+    required: false
+    default: .github/workflows
+  fail-on:
+    description: "Minimum severity that fails the action: error | warning | info | never"
+    required: false
+    default: error
+  disable:
+    description: Comma-separated rule IDs to disable (e.g. GHA005,GHA007)
+    required: false
+    default: ""
+  only-ghactor:
+    description: Skip rhysd/actionlint, only run ghactor rules
+    required: false
+    default: "false"
+  sarif:
+    description: Path to write SARIF to (enables SARIF output). Empty = skip.
+    required: false
+    default: ghactor.sarif
+  upload-sarif:
+    description: Upload SARIF to GitHub code scanning
+    required: false
+    default: "true"
+  version:
+    description: ghactor version to install (default: latest)
+    required: false
+    default: latest
+
+runs:
+  using: composite
+  steps:
+    - name: Install ghactor
+      shell: bash
+      run: go install github.com/kdairatchi/ghactor/cmd/ghactor@${{ inputs.version }}
+
+    - name: Run ghactor lint
+      id: lint
+      shell: bash
+      env:
+        DIR: ${{ inputs.dir }}
+        FAIL_ON: ${{ inputs.fail-on }}
+        DISABLE: ${{ inputs.disable }}
+        ONLY: ${{ inputs.only-ghactor }}
+        SARIF: ${{ inputs.sarif }}
+      run: |
+        set -o pipefail
+        args=(--dir "$DIR" --fail-on "$FAIL_ON")
+        if [ -n "$DISABLE" ]; then args+=(--disable "$DISABLE"); fi
+        if [ "$ONLY" = "true" ]; then args+=(--only-ghactor); fi
+        if [ -n "$SARIF" ]; then args+=(--sarif "$SARIF"); fi
+        ghactor lint "${args[@]}"
+
+    - name: Upload SARIF
+      if: ${{ always() && inputs.sarif != '' && inputs.upload-sarif == 'true' }}
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ inputs.sarif }}
+        category: ghactor

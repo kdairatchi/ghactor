@@ -1,0 +1,21 @@
+name: reusable-bad
+on: [push]
+
+permissions:
+  contents: read
+
+jobs:
+  # floating ref — GHA009 error
+  floating:
+    uses: myorg/myrepo/.github/workflows/deploy.yml@main
+    timeout-minutes: 10
+
+  # semver tag — GHA009 warning
+  tagged:
+    uses: myorg/myrepo/.github/workflows/deploy.yml@v1.2.3
+    timeout-minutes: 10
+
+  # SHA pinned — clean (no GHA009)
+  pinned:
+    uses: myorg/myrepo/.github/workflows/deploy.yml@aabbccdd11223344556677889900aabbccdd1122
+    timeout-minutes: 10

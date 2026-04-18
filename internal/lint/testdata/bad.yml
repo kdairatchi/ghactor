@@ -1,0 +1,16 @@
+name: bad
+on:
+  pull_request_target:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+      - uses: actions/setup-node@main
+      - name: inject
+        run: echo "${{ github.event.pull_request.title }}"
+      - uses: actions/cache
