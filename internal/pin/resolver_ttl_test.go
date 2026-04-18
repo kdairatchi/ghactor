@@ -174,7 +174,9 @@ func TestMigratedEntriesTreatedAsStale(t *testing.T) {
 
 	flat := map[string]string{"actions/checkout@v4": shaA}
 	data, _ := json.MarshalIndent(flat, "", "  ")
-	os.WriteFile(path, data, 0o644)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatalf("seed v1 cache: %v", err)
+	}
 
 	base := time.Date(2026, 4, 18, 0, 0, 0, 0, time.UTC)
 	var calls int32

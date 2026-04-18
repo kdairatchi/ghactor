@@ -92,7 +92,7 @@ sboms:
     args:
       - encode
       - spdx-json
-      - -
+      - "-"
     env:
       - SYFT_FILE_METADATA_SELECTION=all
       - SYFT_FILE_METADATA_CATALOGER=true

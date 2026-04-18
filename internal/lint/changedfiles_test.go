@@ -16,18 +16,6 @@ jobs:
       - uses: actions/checkout@v4
 `
 
-// minimalGoodWorkflow is a workflow that should produce no ghactor findings.
-const minimalGoodWorkflow = `name: test
-on: [push]
-permissions: read-all
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-`
-
 // writeWorkflow writes content as a .yml workflow file in dir.
 func writeWorkflow(t *testing.T, dir, name, content string) string {
 	t.Helper()

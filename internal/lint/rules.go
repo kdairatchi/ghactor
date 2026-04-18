@@ -1042,7 +1042,8 @@ func ruleCacheKeyUntrusted(f *workflow.File) []Issue {
 		}
 		// Match actions/cache@* or setup-* actions that accept a cache-key input.
 		isCache := strings.HasPrefix(s.Uses, "actions/cache@") ||
-			strings.HasPrefix(s.Uses, "actions/cache@") ||
+			strings.HasPrefix(s.Uses, "actions/cache/restore@") ||
+			strings.HasPrefix(s.Uses, "actions/cache/save@") ||
 			strings.Contains(s.Uses, "setup-")
 		if !isCache {
 			return
@@ -2250,7 +2251,7 @@ func ruleSpoofableActorCheck(f *workflow.File) []Issue {
 			out = append(out, Issue{
 				File: f.Path, Line: line, Col: 1,
 				Kind: "GHA032", Severity: SevWarning, Source: "ghactor",
-				Message: fmt.Sprintf("job `if:` checks github.actor/triggering_actor against a [bot] identity — spoofable by any user naming their account identically; use github.event.pull_request.user.login + github.event_name gating instead"),
+				Message: "job `if:` checks github.actor/triggering_actor against a [bot] identity — spoofable by any user naming their account identically; use github.event.pull_request.user.login + github.event_name gating instead",
 			})
 		}
 		for _, s := range j.Steps {

@@ -8,7 +8,6 @@ import (
 	"runtime"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -104,11 +103,7 @@ jobs:
 func TestDebounce(t *testing.T) {
 	dir := makeWorkflowDir(t)
 
-	var lintCount atomic.Int32
-
-	// We'll observe lint calls by counting timerFired channel drains.
-	// Instead of intercepting lint, we count how many times the debounce
-	// fires by running the loop with a short debounce and a controlled source.
+	// Debounce count is derived from output markers below; no atomic counter needed.
 
 	src := newFakeSource()
 	var buf bytes.Buffer
@@ -148,7 +143,6 @@ func TestDebounce(t *testing.T) {
 	output := buf.String()
 	// Count occurrences of the "changed" marker — each debounce fire adds one.
 	changeCount := strings.Count(output, "changed")
-	_ = lintCount
 	if changeCount != 1 {
 		t.Errorf("expected 1 debounced lint run, got %d; output:\n%s", changeCount, output)
 	}
